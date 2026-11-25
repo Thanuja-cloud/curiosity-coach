@@ -1,0 +1,14 @@
+{
+  "name": "curiosity-coach",
+  "version": "1.0.0",
+  "description": "A guilt-free CLI that picks one topic and one 10-minute task a day.",
+  "main": "index.js",
+  "bin": {
+    "coach": "./index.js"
+  },
+  "type": "commonjs",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0"
+  }
+}
