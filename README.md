@@ -26,7 +26,7 @@ Set your Claude API key as an environment variable. It is never stored in the co
 export ANTHROPIC_API_KEY="your-key-here"
 ```
 
-No key? The coach still works and gives you a simple built-in task instead.
+**No key? No problem.** The coach works fully offline. It has 14 built-in task types: 7 for technical topics (run a tiny example, break something and fix it, compare two things…) and 7 for curious ones (answer one question, draw it, spot it in real life…). It won't repeat any of the last five you saw. An API key only adds tasks written by Claude that build on your notes.
 
 Optional settings:
 
@@ -117,7 +117,7 @@ $ coach recap
 - **Data:** `data.json` holds `topics` (name and kind), a `log` of finished sessions (topic, date, minutes, note) and `current` (today's pick plus anything you swapped away). It's created automatically.
 - **Picking:** It takes the topics that match your mood (if you have none of that kind, it uses all of them). Then it sorts by when you last logged each one, oldest first. Topics you've never touched come first, and ties are broken at random.
 - **Swap:** It sets the current topic aside *for today only*. That is never written to your history, so skipping doesn't change how soon the topic comes back.
-- **Tasks:** It sends one request to the Claude API with the topic, your mood and your last two notes on that topic, so each task builds on the last one a little. The request uses low effort and asks for a short answer, which keeps it quick and cheap. If the API can't be reached, you get an offline task instead.
+- **Tasks:** It sends one request to the Claude API with the topic, your mood and your last two notes on that topic, so each task builds on the last one a little. The request uses low effort and asks for a short answer, which keeps it quick and cheap. With no key, or if the API can't be reached, it picks one of the built-in offline tasks for that kind of topic, skipping the last five you saw (tracked in `data.json` as `recentOffline`).
 
 ## How I built it
 

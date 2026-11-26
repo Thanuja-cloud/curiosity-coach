@@ -51,8 +51,9 @@ function pick(data, mood, skipped) {
 }
 
 // ---------- task generation (Claude API) ----------
-async function makeTask(topic, mood, recentNotes) {
-  if (!process.env.ANTHROPIC_API_KEY) return fallbackTask(topic, "(No ANTHROPIC_API_KEY set, so here's an offline task.)");
+async function makeTask(data, topic, kind, mood, recentNotes) {
+  const offline = (why) => fallbackTask(data, topic, kind, why);
+  if (!process.env.ANTHROPIC_API_KEY) return offline("(Offline mode: set ANTHROPIC_API_KEY for tasks written by Claude.)");
   try {
     const Anthropic = require("@anthropic-ai/sdk");
     const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
@@ -73,18 +74,43 @@ async function makeTask(topic, mood, recentNotes) {
           (recentNotes.length ? `What I learned last times: ${recentNotes.join(" | ")}\nBuild on that a little.` : "I'm new to this or it's been a while."),
       }],
     });
-    if (res.stop_reason === "refusal") return fallbackTask(topic, "(Couldn't generate a task this time, so here's a simple one.)");
+    if (res.stop_reason === "refusal") return offline("(Couldn't generate a task this time, so here's an offline one.)");
     const text = res.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
-    return text || fallbackTask(topic, "");
+    return text || offline("");
   } catch (err) {
-    return fallbackTask(topic, `(Couldn't reach Claude${err.status ? ` (error ${err.status})` : ""}. Here's an offline task.)`);
+    return offline(`(Couldn't reach Claude${err.status ? ` (error ${err.status})` : ""}. Here's an offline task.)`);
   }
 }
-function fallbackTask(topic, why) {
-  return `${why ? why + "\n\n" : ""}Explain one idea in ${topic}\n` +
-    `1. Search "${topic} explained simply" and read one short article.\n` +
-    `2. Pick ONE concept you met and write 3 sentences explaining it to a friend.\n` +
-    `Done when: you can say those 3 sentences out loud without looking.`;
+// Offline tasks: title | steps... | done-when. {t} becomes the topic name.
+const OFFLINE = {
+  technical: [
+    "Run one tiny example|Find the smallest working example of {t} in the official docs|Run it, then change one thing and run it again|you can say what your change did",
+    "Learn one new command or keyword|Search \"{t} most used commands\" (or keywords)|Pick one you don't know and try it on a tiny example|you've used it once successfully",
+    "Make it break, then fix it|Write a tiny {t} example and break it on purpose|Read the error message slowly and look it up|you can explain the error in one sentence and fix it",
+    "Write a sticky-note summary|Pick one {t} concept you half-know|On paper, write 3 lines: what it is, why it exists, one example|the note would make sense to you next month",
+    "Compare two things|Search \"{t} vs\" and pick one pair you've heard of|Write one line on when you'd use each|you could choose the right one in a real task",
+    "Answer one interview question|Search \"{t} beginner interview questions\" and pick one|Answer it out loud for 2 minutes, then check a good answer online|you know one thing you missed",
+    "Read 20 lines of real code|Find a short {t} example on GitHub or in the docs|Add a comment to each line saying what it does|there's no line you can't explain",
+  ],
+  curious: [
+    "Answer one question|Write down one question about {t} that starts with \"Why\" or \"How\"|Spend 7 minutes finding an answer|you can answer it in two sentences",
+    "Spot it in real life|Find one place {t} shows up in everyday life, the news or nature|Write 2 sentences linking the idea to that example|you could tell a friend about it over tea",
+    "Draw it|Pick one idea in {t}|Sketch it as a diagram with arrows and as few words as possible|the drawing explains the idea on its own",
+    "Watch one short explainer|Find a video under 8 minutes on one {t} idea|Write down the single most surprising thing in it|you've written that one line",
+    "Try a small puzzle or experiment|Search \"{t} puzzle for beginners\" or \"simple {t} experiment at home\"|Do one, and write down your answer or result|you have a result, even a wrong one",
+    "Meet one person behind it|Look up one well-known person in {t}|Find the one idea they're known for|you can say who they were and what they figured out",
+    "Learn one word|Find a {t} term you've seen but couldn't define|Read a definition and one example of it in use|you can use the word in your own sentence",
+  ],
+};
+function fallbackTask(data, topic, kind, why) {
+  const all = OFFLINE[kind] || OFFLINE.technical;
+  const recent = data.recentOffline || [];
+  const fresh = all.filter((s) => !recent.includes(s.split("|")[0]));
+  const pool = fresh.length ? fresh : all;
+  const parts = pool[Math.floor(Math.random() * pool.length)].replaceAll("{t}", topic).split("|");
+  data.recentOffline = [...recent, parts[0]].slice(-5); // avoid repeats
+  const steps = parts.slice(1, -1).map((s, i) => `${i + 1}. ${s}.`).join("\n");
+  return `${why ? why + "\n\n" : ""}${parts[0]}: ${topic}\n${steps}\nDone when: ${parts.at(-1)}.`;
 }
 
 async function present(data, mood, skipped) {
@@ -92,7 +118,7 @@ async function present(data, mood, skipped) {
   const topic = pick(data, mood, skipped);
   const notes = data.log.filter((e) => same(e.topic, topic.name)).slice(-2).map((e) => e.note);
   console.log(`\n🎯 Today: ${topic.name}  (last touched: ${daysAgo(lastTouched(data, topic.name))})\n`);
-  const task = await makeTask(topic.name, mood, notes);
+  const task = await makeTask(data, topic.name, topic.kind, mood, notes);
   console.log(task + "\n");
   console.log("Not feeling it? `coach swap`. Finished? `coach done \"what I learned\"`.");
   data.current = { date: today(), topic: topic.name, mood, task, skipped };
